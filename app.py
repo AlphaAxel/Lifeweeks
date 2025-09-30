@@ -50,8 +50,8 @@ st.caption(
 
 # ------------------ Parameters ------------------
 YEARS_TO_SHOW = 100
-fade_base = 0.01
-fade_gain = 0.45
+fade_base = 0.0
+fade_gain = 1.0
 dot_size  = 8
 
 # ------------------ Build grid ------------------
