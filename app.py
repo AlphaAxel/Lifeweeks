@@ -37,15 +37,15 @@ def week_row_col_for_date(date: datetime, birth_date: datetime, weeks_per_row=52
     return row, col
 
 # ------------------ Streamlit UI ------------------
-st.set_page_config(page_title="LifeWeeks — Risk & Survival", page_icon="📅", layout="centered")
-st.title("LifeWeeks — Risk & Survival")
+st.set_page_config(page_title="LifeWeeks: Risk & Survival", page_icon="📅", layout="centered")
+st.title("LifeWeeks: Risk & Survival")
 
 dob = st.date_input("Date of birth", value=datetime(1997,5,25).date())
 
 st.caption(
-    "Each dot is a week of life. Colors show **annual mortality risk** (log scale, jet colormap). "
-    "Greyscale shows **conditional survival from today** (assumes you are alive now). "
-    "Today’s week is marked with a thin black ring."
+    "Each dot is a week of life. Colors show annual risk (log scale, jet). "
+    "Greyscale shows conditional survival from today. "
+    "Today is marked with a black ring."
 )
 
 # ------------------ Parameters ------------------
