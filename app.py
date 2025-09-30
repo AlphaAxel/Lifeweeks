@@ -49,7 +49,16 @@ st.title("Life Weeks — Risk & Survival")
 col1, col2 = st.columns(2)
 with col1:
     dob = st.date_input("Date of birth", value=datetime(1997,5,25).date())
+with col2:
+    years_to_show = st.number_input("Years to show", 80, 120, 100, step=1)
 
+
+st.caption(
+    "Dots are colored by **instantaneous mortality risk** (log scale, **jet**). "
+    "Greyscale underlay shows **conditional survival from today** — we assume "
+    "you are alive now, so survival = 1 before today and decays for future weeks. "
+    "Today’s week is shown with a thin black ring."
+)
 
 # ------------------ Build grid for this DOB ------------------
 birth_date = datetime(dob.year, dob.month, dob.day)
