@@ -143,12 +143,7 @@ for sp in ax_top.spines.values():
 cax_risk = fig.add_axes([0.91, 0.20, 0.02, 0.58])
 cbar_risk = fig.colorbar(plt.cm.ScalarMappable(cmap=cmap_risk, norm=norm_risk),
                          cax=cax_risk, orientation="vertical")
-                         # Force plain decimal labels
-cbar_risk.ax.yaxis.set_major_formatter(ScalarFormatter())
-cbar_risk.ax.yaxis.get_major_formatter().set_scientific(False)
-
-# Control tick positions: only decades (no in-betweens)
-cbar_risk.ax.yaxis.set_major_locator(LogLocator(base=10.0, subs=None, numticks=10))
+                         
 cbar_risk.set_label("Annual Risk", fontsize=8, labelpad=1)
 cbar_risk.ax.yaxis.set_label_position('left')
 cbar_risk.ax.yaxis.set_ticks_position('left')
