@@ -1,1 +1,209 @@
-print('Hello Lifeweeks!')
+import io
+from datetime import datetime, timezone
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm, Normalize
+import streamlit as st
+
+# ------------------ Mortality model (Gompertz–Makeham) ------------------
+# Smooth, illustrative parameters. Replace if you have your own calibration.
+alpha = 0.0002893243687451036
+beta  = 0.10425701482947486
+c     = 0.0
+anchor_age = 28.0
+WEEKS_PER_ROW = 52
+
+def hazard(age_years: np.ndarray) -> np.ndarray:
+    """Instantaneous mortality μ(age) in 1/year."""
+    return c + alpha * np.exp(beta * (age_years - anchor_age))
+
+def survival_from_birth(age_years: np.ndarray) -> np.ndarray:
+    """Unconditional survival from birth to age_years."""
+    return np.exp(- c*age_years - (alpha/beta)*np.exp(-beta*anchor_age)*(np.exp(beta*age_years) - 1.0))
+
+# ------------------ Date helpers (tz-safe, weekly bins) ------------------
+def _naive_ymd(dt: datetime) -> datetime:
+    """Return timezone-naive date (midnight) from any datetime."""
+    return datetime(dt.year, dt.month, dt.day)
+
+def col_for_date_within_year(date: datetime, weeks_per_row=52) -> int:
+    """Map a calendar date to a 0..weeks_per_row-1 column index within its year (Jan..Dec)."""
+    d = _naive_ymd(date)
+    jan1      = datetime(d.year, 1, 1)
+    jan1_next = datetime(d.year + 1, 1, 1)
+    frac      = (d - jan1).total_seconds() / (jan1_next - jan1).total_seconds()
+    return int(np.floor(frac * weeks_per_row)) % weeks_per_row
+
+def week_row_col_for_date(date: datetime, birth_date: datetime, weeks_per_row=52):
+    """Return (row, col) for a date relative to birth_date grid."""
+    d  = _naive_ymd(date)
+    bd = _naive_ymd(birth_date)
+    row = d.year - bd.year
+    col = col_for_date_within_year(d, weeks_per_row)
+    return row, col
+
+# ------------------ Streamlit UI ------------------
+st.set_page_config(page_title="Life Weeks — Risk & Survival (Conditional on Today)", page_icon="📅", layout="centered")
+st.title("Life Weeks — Risk & Survival")
+
+col1, col2 = st.columns(2)
+with col1:
+    dob = st.date_input("Date of birth", value=datetime(1997,5,25).date())
+with col2:
+    years_to_show = st.number_input("Years to show", 80, 120, 100, step=1)
+
+fade_base = st.slider("Fade base (alpha)", 0.0, 0.2, 0.01, 0.01)
+fade_gain = st.slider("Fade gain × S_cond(age)", 0.1, 0.8, 0.45, 0.05)
+dot_size  = st.slider("Dot size", 4, 16, 8, 1)
+
+st.caption(
+    "Dots are colored by **instantaneous mortality risk** (log scale, **jet**). "
+    "Greyscale underlay shows **conditional survival from today** — we assume "
+    "you are alive now, so survival = 1 before today and decays for future weeks. "
+    "Today’s week is shown with a thin black ring."
+)
+
+# ------------------ Build grid for this DOB ------------------
+birth_date = datetime(dob.year, dob.month, dob.day)
+today = datetime.now(timezone.utc)
+
+years = int(years_to_show)
+cols  = WEEKS_PER_ROW
+
+# Continuous ages at each cell (years since birth)
+y_idx = np.arange(years)[:, None]
+w_idx = np.arange(cols)[None, :]
+ages  = y_idx + w_idx / WEEKS_PER_ROW  # shape (years, cols)
+
+# Unconditional survival & hazard
+S_uncond  = survival_from_birth(ages)
+MU_grid   = hazard(ages)
+
+# First row: start at actual birth week column
+birth_col_0 = col_for_date_within_year(birth_date, WEEKS_PER_ROW)
+
+# ----- Conditional survival on being alive today -----
+today_naive = _naive_ymd(today)
+birth_naive = _naive_ymd(birth_date)
+a0 = max(0.0, (today_naive - birth_naive).days / 365.2425)  # current age in years
+
+S0 = float(survival_from_birth(np.array([a0]))[0])
+eps = 1e-12
+S_cond = np.where(ages < a0, 1.0, S_uncond / max(S0, eps))  # S=1 in the past, S/S(a0) in the future
+
+# Flatten to scatter, respecting first-row trim
+x_list, y_list, mu_list, s_list = [], [], [], []
+row_mean_S = np.zeros(years)
+for r in range(years):
+    allowed = np.arange(birth_col_0, cols) if r == 0 else np.arange(cols)
+    x_list.append(allowed)
+    y_list.append(np.full(allowed.size, r))
+    mu_list.append(MU_grid[r, allowed])
+    s_list.append(S_cond[r, allowed])
+    row_mean_S[r] = float(np.mean(S_cond[r, allowed]))  # year label fade uses conditional S
+
+x = np.concatenate(x_list)
+y = np.concatenate(y_list)
+mu_vals = np.concatenate(mu_list)
+s_vals  = np.concatenate(s_list)
+
+# Present week ring coordinates
+present_row, present_col = week_row_col_for_date(today, birth_date, WEEKS_PER_ROW)
+present_ok = (0 <= present_row < years and not (present_row == 0 and present_col < birth_col_0))
+
+# ------------------ Plot (A4 portrait) ------------------
+FIG_W, FIG_H = 8.27, 11.69
+FONT_SIZE_AXIS = 7
+YEAR_X = -1.5
+MONTH_PAD = 10
+
+month_labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+month_pos = (np.linspace(0, cols, 12, endpoint=False) + cols/12/2.0)
+month_pos = np.clip(month_pos, 0, cols-1)
+
+fig, ax = plt.subplots(figsize=(FIG_W, FIG_H))
+plt.subplots_adjust(left=0.10, right=0.84, top=0.95, bottom=0.08)
+
+# (A) Conditional survival underlay (Greys)
+norm_surv = Normalize(vmin=0.0, vmax=1.0)
+ax.scatter(x, y, c=s_vals, cmap="Greys", norm=norm_surv,
+           s=dot_size, marker="o", edgecolors="none", zorder=4, alpha=0.28)
+
+# (B) Risk overlay (JET, LOG) with conditional fade
+norm_risk = LogNorm(vmin=max(mu_vals.min(), 1e-7), vmax=mu_vals.max())
+cmap_risk = plt.get_cmap("jet")
+risk_rgba = cmap_risk(norm_risk(mu_vals))
+risk_rgba[:, 3] = np.clip(fade_base + fade_gain * s_vals, 0.0, 1.0)  # alpha scales with conditional survival
+ax.scatter(x, y, s=dot_size, marker="o", facecolors=risk_rgba, edgecolors="none", zorder=5)
+
+# Axes cosmetics
+ax.invert_yaxis()
+for side in ["left","right","top","bottom"]:
+    ax.spines[side].set_visible(False)
+ax.grid(False)
+ax.set_xlim(-1.8, cols - 0.5)
+ax.set_ylim(years - 0.5, -0.5)
+ax.tick_params(axis="both", which="both", length=0, labelleft=False, labelbottom=False)
+
+# Year labels (fade by conditional survival mean)
+cmap_grey = plt.cm.Greys
+for r in range(years):
+    ax.text(YEAR_X, r, str(birth_date.year + r), va="center", ha="right",
+            fontsize=FONT_SIZE_AXIS, color=cmap_grey(row_mean_S[r]), zorder=6)
+
+# Months on top
+ax_top = ax.secondary_xaxis("top")
+ax_top.set_xticks(month_pos)
+ax_top.set_xticklabels(month_labels, fontsize=FONT_SIZE_AXIS)
+ax_top.tick_params(axis="x", length=0, pad=MONTH_PAD)
+for sp in ax_top.spines.values():
+    sp.set_visible(False)
+
+# (C) Dual colorbars (risk left, survival right), labels on LEFT for visibility
+cax_risk = fig.add_axes([0.91, 0.20, 0.02, 0.58])
+cbar_risk = fig.colorbar(plt.cm.ScalarMappable(cmap=cmap_risk, norm=norm_risk),
+                         cax=cax_risk, orientation="vertical")
+cbar_risk.set_label("Annual Risk", fontsize=8, labelpad=1)
+cbar_risk.ax.yaxis.set_label_position('left')
+cbar_risk.ax.yaxis.set_ticks_position('left')
+cbar_risk.ax.tick_params(labelsize=FONT_SIZE_AXIS)
+for sp in cbar_risk.ax.spines.values():
+    sp.set_visible(False)
+
+sm_surv = plt.cm.ScalarMappable(cmap="Greys", norm=norm_surv)
+sm_surv.set_array([])
+cax_surv = fig.add_axes([0.985, 0.20, 0.02, 0.58])
+cbar_surv = fig.colorbar(sm_surv, cax=cax_surv, orientation="vertical")
+cbar_surv.set_label("Survival", fontsize=8, labelpad=1)  # emphasize conditional
+cbar_surv.ax.yaxis.set_label_position('left')
+cbar_surv.ax.yaxis.set_ticks_position('left')
+cbar_surv.ax.tick_params(labelsize=FONT_SIZE_AXIS)
+for sp in cbar_surv.ax.spines.values():
+    sp.set_visible(False)
+
+# (D) Today ring — thin stroke
+if present_ok:
+    ax.scatter([present_col], [present_row], s=dot_size*5.0,
+               facecolors="none", edgecolors="black", linewidths=0.6, zorder=40)
+
+# Render in app
+st.pyplot(fig, use_container_width=True)
+
+# ------------------ Downloads ------------------
+buf_png = io.BytesIO()
+fig.savefig(buf_png, format="png", dpi=600)
+buf_png.seek(0)
+
+buf_pdf = io.BytesIO()
+fig.savefig(buf_pdf, format="pdf")
+buf_pdf.seek(0)
+
+col_dl1, col_dl2 = st.columns(2)
+with col_dl1:
+    st.download_button("⬇️ Download PNG (600 dpi)", data=buf_png,
+                       file_name=f"life_weeks_jet_{birth_date.strftime('%Y%m%d')}.png",
+                       mime="image/png")
+with col_dl2:
+    st.download_button("⬇️ Download PDF (vector)", data=buf_pdf,
+                       file_name=f"life_weeks_jet_{birth_date.strftime('%Y%m%d')}.pdf",
+                       mime="application/pdf")
