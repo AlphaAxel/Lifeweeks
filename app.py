@@ -40,7 +40,7 @@ def week_row_col_for_date(date: datetime, birth_date: datetime, weeks_per_row=52
 st.set_page_config(page_title="LifeWeeks: Risk & Survival", page_icon="📅", layout="centered")
 st.title("LifeWeeks: Risk & Survival")
 
-dob = st.date_input("Date of birth", value=datetime(1997,5,25).date())
+dob = st.date_input("Enter date of birth", value=datetime(1990,01,01).date())
 
 st.caption(
     "Each dot is a week of life. Colors show annual risk (log scale, jet). "
