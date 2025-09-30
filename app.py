@@ -52,6 +52,9 @@ with col1:
 with col2:
     years_to_show = st.number_input("Years to show", 80, 120, 100, step=1)
 
+fade_base = st.slider("Fade base (alpha)", 0.0, 0.2, 0.01, 0.01)
+fade_gain = st.slider("Fade gain × S_cond(age)", 0.1, 0.8, 0.45, 0.05)
+dot_size  = st.slider("Dot size", 4, 16, 8, 1)
 
 st.caption(
     "Dots are colored by **instantaneous mortality risk** (log scale, **jet**). "
