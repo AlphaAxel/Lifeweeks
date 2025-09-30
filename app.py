@@ -111,7 +111,7 @@ plt.subplots_adjust(left=0.10, right=0.84, top=0.95, bottom=0.08)
 
 norm_surv = Normalize(vmin=0.0, vmax=1.0)
 ax.scatter(x, y, c=s_vals, cmap="Greys", norm=norm_surv,
-           s=dot_size, marker="o", edgecolors="none", zorder=4, alpha=0.28)
+           s=dot_size, marker="o", edgecolors="none", zorder=4, alpha=1.0)
 
 norm_risk = LogNorm(vmin=max(mu_vals.min(), 1e-7), vmax=mu_vals.max())
 cmap_risk = plt.get_cmap("jet")
