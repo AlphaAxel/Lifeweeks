@@ -52,7 +52,7 @@ st.caption(
 YEARS_TO_SHOW = 100
 fade_base = 0.0
 fade_gain = 1.0
-dot_size  = 8
+dot_size  = 10
 
 # ------------------ Build grid ------------------
 birth_date = datetime(dob.year, dob.month, dob.day)
